@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Amazon Search Toolkit",
+  "description": "Filter, sort, and reshape Amazon search results with delivery-date controls, sponsored cleanup, and grid tools.",
+  "version": "1.0.0",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.amazon.com/*",
+        "*://*.amazon.ca/*",
+        "*://*.amazon.co.uk/*",
+        "*://*.amazon.de/*",
+        "*://*.amazon.fr/*",
+        "*://*.amazon.es/*",
+        "*://*.amazon.it/*",
+        "*://*.amazon.in/*",
+        "*://*.amazon.co.jp/*",
+        "*://*.amazon.com.au/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
