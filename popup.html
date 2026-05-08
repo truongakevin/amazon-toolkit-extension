@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amazon Search Toolkit</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <h2>Amazon Search Toolkit</h2>
+
+  <section id="current-config">
+    <h3>Current Search Config</h3>
+    <div class="config-row"><span class="label">Deliver by:</span><span id="cfg-deliver-by">—</span></div>
+    <div class="config-row"><span class="label">Include unknown:</span><span id="cfg-include-unknown">—</span></div>
+    <div class="config-row"><span class="label">Mode:</span><span id="cfg-mode">—</span></div>
+    <div class="config-row"><span class="label">Pages loaded:</span><span id="cfg-pages">—</span></div>
+    <div class="config-row"><span class="label">Last sort:</span><span id="cfg-sort">—</span></div>
+  </section>
+
+  <div class="actions">
+    <button id="btn-export">Export Page HTML + Config</button>
+    <p id="status"></p>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

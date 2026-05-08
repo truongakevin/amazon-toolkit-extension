@@ -4,6 +4,10 @@
   "description": "Filter, sort, and reshape Amazon search results with delivery-date controls, sponsored cleanup, and grid tools.",
   "version": "1.0.0",
   "permissions": ["storage"],
+  "action": {
+    "default_title": "Search Toolkit",
+    "default_popup": "popup.html"
+  },
   "content_scripts": [
     {
       "matches": [
