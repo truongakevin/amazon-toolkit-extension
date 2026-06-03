@@ -40,3 +40,9 @@ Changes are saved and auto-apply when results update.
 - Amazon changes markup frequently, so selectors may need occasional updates.
 - Date parsing supports common English date labels and formats (`Today`, `Tomorrow`, `May 14`, `May 14 - May 16`).
 - Unknown delivery dates can be included/excluded with the checkbox.
+
+## Support
+
+If this toolkit helps you, you can support development here:
+
+- https://buymeacoffee.com/kevinatruong

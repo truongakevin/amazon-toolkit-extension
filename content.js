@@ -13,6 +13,7 @@
   const RESULTS_CONTAINER_SELECTOR = ".s-main-slot.s-result-list.s-search-results";
   const NEXT_PAGE_SELECTOR = "a.s-pagination-next";
   const PAGES_INPUT_ID = "amz-toolkit-inline-pages";
+  const SUPPORT_URL = "https://buymeacoffee.com/kevinatruong";
 
   const MONTHS = {
     jan: 0,
@@ -705,6 +706,12 @@
       s.style.cssText = "font-size:13px; color:#0F1111; white-space:nowrap;";
       return s;
     };
+
+    const supportBtn = makeBtn("☕ Support", () => {
+      window.open(SUPPORT_URL, "_blank", "noopener,noreferrer");
+    });
+    supportBtn.style.marginRight = "auto";
+    root.appendChild(supportBtn);
 
     const pagesItem = document.createElement("div");
     pagesItem.className = "filter-item";
