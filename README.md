@@ -3,6 +3,7 @@
 Enhances Amazon search listings with:
 
 - **Deliver by date** filtering (latest acceptable delivery date)
+- **Price range** filtering (min/max)
 - **Sponsored result cleanup**
 - **Inline sorting** (delivery date, review count)
 - **Grid view toggle** (4 items per row)
@@ -27,6 +28,7 @@ On Amazon search pages (`/s`), the extension injects an inline toolbar to help y
 2. The inline toolbar appears at the top of results automatically with controls for:
    - **Pages**: Enter how many result pages to load (1–50)
    - **Deliver-by date**: Pick a cutoff date for delivery filtering
+   - **Price**: Set minimum and/or maximum product price
    - **Include unknown**: Toggle to include/exclude items with no delivery estimate
    - **Apply / Reset**: Apply filters or reset to default view
    - **Sort buttons**: Reorder by delivery date, review count, or reset to original order

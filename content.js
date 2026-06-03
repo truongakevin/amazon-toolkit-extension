@@ -45,7 +45,9 @@
   let settings = {
     mode: "off",
     maxDate: "",
-    includeUnknown: true
+    includeUnknown: true,
+    minPrice: "",
+    maxPrice: ""
   };
 
   let observer;
@@ -349,14 +351,62 @@
     return null;
   }
 
-  function shouldKeepItem(deliveryWindow) {
-    if (settings.mode === "off") return true;
-    if (!deliveryWindow) return settings.includeUnknown;
-    if (settings.mode === "byDate") {
-      const maxDate = parseInputDate(settings.maxDate);
-      if (!maxDate) return true;
-      return deliveryWindow.end <= maxDate;
+  function parsePriceTextToNumber(text) {
+    if (!text) return null;
+
+    let normalized = text.replace(/[^\d.,-]/g, "").trim();
+    if (!normalized) return null;
+
+    if (normalized.includes(",") && normalized.includes(".")) {
+      normalized = normalized.replace(/,/g, "");
+    } else if (normalized.includes(",") && !normalized.includes(".")) {
+      normalized = normalized.replace(/,/g, ".");
     }
+
+    const value = Number.parseFloat(normalized);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function extractPriceFromCard(card) {
+    const selectors = [
+      ".a-price:not(.a-text-price) .a-offscreen",
+      ".a-price .a-offscreen"
+    ];
+
+    for (const selector of selectors) {
+      const nodes = Array.from(card.querySelectorAll(selector));
+      for (const node of nodes) {
+        const text = (node.textContent || "").trim();
+        const value = parsePriceTextToNumber(text);
+        if (value !== null) return value;
+      }
+    }
+
+    return null;
+  }
+
+  function shouldKeepItem(card, deliveryWindow) {
+    const hasDeliveryFilter = settings.mode === "byDate";
+    const minPrice = Number.parseFloat(settings.minPrice);
+    const maxPrice = Number.parseFloat(settings.maxPrice);
+    const hasMinPrice = Number.isFinite(minPrice);
+    const hasMaxPrice = Number.isFinite(maxPrice);
+
+    if (hasDeliveryFilter) {
+      if (!deliveryWindow && !settings.includeUnknown) return false;
+      if (deliveryWindow) {
+        const maxDate = parseInputDate(settings.maxDate);
+        if (maxDate && deliveryWindow.end > maxDate) return false;
+      }
+    }
+
+    if (hasMinPrice || hasMaxPrice) {
+      const price = extractPriceFromCard(card);
+      if (price === null) return false;
+      if (hasMinPrice && price < minPrice) return false;
+      if (hasMaxPrice && price > maxPrice) return false;
+    }
+
     return true;
   }
 
@@ -438,7 +488,9 @@
   }
 
   function hasActiveFilter() {
-    return settings.mode === "byDate";
+    const minPrice = Number.parseFloat(settings.minPrice);
+    const maxPrice = Number.parseFloat(settings.maxPrice);
+    return settings.mode === "byDate" || Number.isFinite(minPrice) || Number.isFinite(maxPrice);
   }
 
   function removeMoreResultsHeading() {
@@ -559,7 +611,7 @@
 
       setSponsoredHiddenState(card, false);
       const deliveryWindow = extractDeliveryWindowFromCard(card);
-      const keep = shouldKeepItem(deliveryWindow);
+      const keep = shouldKeepItem(card, deliveryWindow);
       setCardHiddenState(card, !keep);
       if (!keep) hiddenCount += 1;
     });
@@ -763,6 +815,34 @@
       "box-shadow:0 2px 5px rgba(213,217,217,.5);";
     root.appendChild(maxDateEl);
 
+    root.appendChild(makeLabel("Price:"));
+
+    const minPriceEl = document.createElement("input");
+    minPriceEl.id = "amz-toolkit-inline-min-price";
+    minPriceEl.type = "number";
+    minPriceEl.step = "0.01";
+    minPriceEl.min = "0";
+    minPriceEl.placeholder = "Min";
+    minPriceEl.value = settings.minPrice || "";
+    minPriceEl.style.cssText =
+      "height:29px; width:80px; border:1px solid #888c8c; border-radius:3px; background:#fff;" +
+      "padding:0 8px; font-size:13px; font-family:inherit; color:#0F1111;" +
+      "box-shadow:0 2px 5px rgba(213,217,217,.5);";
+    root.appendChild(minPriceEl);
+
+    const maxPriceEl = document.createElement("input");
+    maxPriceEl.id = "amz-toolkit-inline-max-price";
+    maxPriceEl.type = "number";
+    maxPriceEl.step = "0.01";
+    maxPriceEl.min = "0";
+    maxPriceEl.placeholder = "Max";
+    maxPriceEl.value = settings.maxPrice || "";
+    maxPriceEl.style.cssText =
+      "height:29px; width:80px; border:1px solid #888c8c; border-radius:3px; background:#fff;" +
+      "padding:0 8px; font-size:13px; font-family:inherit; color:#0F1111;" +
+      "box-shadow:0 2px 5px rgba(213,217,217,.5);";
+    root.appendChild(maxPriceEl);
+
     const includeUnknownEl = document.createElement("input");
     includeUnknownEl.id = "amz-toolkit-inline-include-unknown";
     includeUnknownEl.type = "checkbox";
@@ -778,7 +858,25 @@
 
     root.appendChild(makeBtn("Apply", async () => {
       const date = maxDateEl.value;
-      const next = { ...settings, mode: date ? "byDate" : "off", maxDate: date, includeUnknown: includeUnknownEl.checked };
+      const minPrice = minPriceEl.value.trim();
+      const maxPrice = maxPriceEl.value.trim();
+      const next = {
+        ...settings,
+        mode: date ? "byDate" : "off",
+        maxDate: date,
+        includeUnknown: includeUnknownEl.checked,
+        minPrice,
+        maxPrice
+      };
+
+      const min = Number.parseFloat(minPrice);
+      const max = Number.parseFloat(maxPrice);
+      if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
+        const corrected = String(min);
+        maxPriceEl.value = corrected;
+        next.maxPrice = corrected;
+      }
+
       settings = next;
       ensureReapplyGuard();
       applyFilters("inline-ui-apply");
@@ -788,7 +886,16 @@
     root.appendChild(makeBtn("Reset", async () => {
       maxDateEl.value = "";
       includeUnknownEl.checked = true;
-      const next = { ...settings, mode: "off", maxDate: "", includeUnknown: true };
+      minPriceEl.value = "";
+      maxPriceEl.value = "";
+      const next = {
+        ...settings,
+        mode: "off",
+        maxDate: "",
+        includeUnknown: true,
+        minPrice: "",
+        maxPrice: ""
+      };
       settings = next;
       ensureReapplyGuard();
       applyFilters("inline-ui-reset");
