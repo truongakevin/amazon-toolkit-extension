@@ -734,9 +734,17 @@
     const root = document.createElement("div");
     root.id = INLINE_FILTER_UI_ID;
     root.style.cssText =
-      "display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap;" +
-      "padding:4px 18px 4px 18px; background:#fff; border-bottom:1px solid #ddd;" +
+      "display:flex; flex-direction:column; align-items:stretch; gap:8px;" +
+      "padding:6px 18px; background:#fff; border-bottom:1px solid #ddd;" +
       "font-family:'Amazon Ember',Arial,sans-serif; font-size:13px; color:#0F1111;";
+
+    const row1 = document.createElement("div");
+    row1.style.cssText = "display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap;";
+    const row2 = document.createElement("div");
+    row2.style.cssText = "display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap;";
+
+    root.appendChild(row1);
+    root.appendChild(row2);
 
     const makeBtn = (text, onClick) => {
       const btn = document.createElement("button");
@@ -763,7 +771,7 @@
       window.open(SUPPORT_URL, "_blank", "noopener,noreferrer");
     });
     supportBtn.style.marginRight = "auto";
-    root.appendChild(supportBtn);
+    row1.appendChild(supportBtn);
 
     const pagesItem = document.createElement("div");
     pagesItem.className = "filter-item";
@@ -801,9 +809,9 @@
 
     pagesItem.appendChild(pagesTitle);
     pagesItem.appendChild(pagesInput);
-    root.appendChild(pagesItem);
+    row1.appendChild(pagesItem);
 
-    root.appendChild(makeLabel("Deliver by:"));
+    row1.appendChild(makeLabel("Deliver by:"));
 
     const maxDateEl = document.createElement("input");
     maxDateEl.id = "amz-toolkit-inline-max-date";
@@ -813,9 +821,9 @@
       "height:29px; border:1px solid #888c8c; border-radius:3px; background:#fff;" +
       "padding:0 8px; font-size:13px; font-family:inherit; color:#0F1111;" +
       "box-shadow:0 2px 5px rgba(213,217,217,.5);";
-    root.appendChild(maxDateEl);
+    row1.appendChild(maxDateEl);
 
-    root.appendChild(makeLabel("Price:"));
+    row1.appendChild(makeLabel("Price:"));
 
     const minPriceEl = document.createElement("input");
     minPriceEl.id = "amz-toolkit-inline-min-price";
@@ -828,7 +836,7 @@
       "height:29px; width:80px; border:1px solid #888c8c; border-radius:3px; background:#fff;" +
       "padding:0 8px; font-size:13px; font-family:inherit; color:#0F1111;" +
       "box-shadow:0 2px 5px rgba(213,217,217,.5);";
-    root.appendChild(minPriceEl);
+    row1.appendChild(minPriceEl);
 
     const maxPriceEl = document.createElement("input");
     maxPriceEl.id = "amz-toolkit-inline-max-price";
@@ -841,7 +849,7 @@
       "height:29px; width:80px; border:1px solid #888c8c; border-radius:3px; background:#fff;" +
       "padding:0 8px; font-size:13px; font-family:inherit; color:#0F1111;" +
       "box-shadow:0 2px 5px rgba(213,217,217,.5);";
-    root.appendChild(maxPriceEl);
+    row1.appendChild(maxPriceEl);
 
     const includeUnknownEl = document.createElement("input");
     includeUnknownEl.id = "amz-toolkit-inline-include-unknown";
@@ -854,9 +862,9 @@
     includeUnknownLabel.style.cssText = "font-size:13px; color:#0F1111; white-space:nowrap; cursor:pointer; display:flex; align-items:center; gap:5px;";
     includeUnknownLabel.appendChild(includeUnknownEl);
     includeUnknownLabel.appendChild(document.createTextNode("Include unknown"));
-    root.appendChild(includeUnknownLabel);
+    row1.appendChild(includeUnknownLabel);
 
-    root.appendChild(makeBtn("Apply", async () => {
+    row1.appendChild(makeBtn("Apply", async () => {
       const date = maxDateEl.value;
       const minPrice = minPriceEl.value.trim();
       const maxPrice = maxPriceEl.value.trim();
@@ -883,7 +891,7 @@
       await chrome.storage.sync.set({ [STORAGE_KEY]: next });
     }));
 
-    root.appendChild(makeBtn("Reset", async () => {
+    row1.appendChild(makeBtn("Reset", async () => {
       maxDateEl.value = "";
       includeUnknownEl.checked = true;
       minPriceEl.value = "";
@@ -903,27 +911,19 @@
     }));
 
     const badge = getOrCreateDebugBadge();
-    root.appendChild(badge);
+    row1.appendChild(badge);
 
-    const sep = document.createElement("span");
-    sep.style.cssText = "width:1px; height:18px; background:#ddd; flex-shrink:0;";
-    root.appendChild(sep);
-
-    root.appendChild(makeLabel("Sort:"));
-    root.appendChild(makeBtn("Delivery Date", () => doSort("deliveryDate")));
-    root.appendChild(makeBtn("Review Count", () => doSort("reviewCount")));
-    root.appendChild(makeBtn("Reset", () => doSort("reset")));
-
-    const sep2 = document.createElement("span");
-    sep2.style.cssText = "width:1px; height:18px; background:#ddd; flex-shrink:0;";
-    root.appendChild(sep2);
+    row2.appendChild(makeLabel("Sort:"));
+    row2.appendChild(makeBtn("Delivery Date", () => doSort("deliveryDate")));
+    row2.appendChild(makeBtn("Review Count", () => doSort("reviewCount")));
+    row2.appendChild(makeBtn("Reset", () => doSort("reset")));
 
     const GRID_STYLE_ID = "amz-toolkit-grid-style";
     let gridActive = false;
     // Store original inline styles so we can restore on toggle-off
     const gridOriginalStyles = new WeakMap();
 
-    root.appendChild(makeBtn("⊞ Grid View", () => {
+    row2.appendChild(makeBtn("⊞ Grid View", () => {
       gridActive = !gridActive;
 
       const container = document.querySelector(RESULTS_CONTAINER_SELECTOR);
