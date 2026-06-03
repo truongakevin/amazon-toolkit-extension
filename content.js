@@ -915,6 +915,8 @@
 
     row2.appendChild(makeLabel("Sort:"));
     row2.appendChild(makeBtn("Delivery Date", () => doSort("deliveryDate")));
+    row2.appendChild(makeBtn("Price ↑", () => doSort("priceAsc")));
+    row2.appendChild(makeBtn("Price ↓", () => doSort("priceDesc")));
     row2.appendChild(makeBtn("Review Count", () => doSort("reviewCount")));
     row2.appendChild(makeBtn("Reset", () => doSort("reset")));
 
@@ -1026,6 +1028,11 @@
     return win ? win.start.getTime() : Infinity;
   }
 
+  function getPriceSortKey(card) {
+    const price = extractPriceFromCard(card);
+    return price != null ? price : Infinity;
+  }
+
   function applySortToDOM(sortedCards) {
     const container = document.querySelector(".s-main-slot.s-result-list.s-search-results");
     if (!container) return;
@@ -1078,6 +1085,12 @@
     } else if (type === "deliveryDate") {
       sorted = [...originalCardOrder].sort((a, b) => getDeliverySortKey(a) - getDeliverySortKey(b));
       currentSort = "deliveryDate";
+    } else if (type === "priceAsc") {
+      sorted = [...originalCardOrder].sort((a, b) => getPriceSortKey(a) - getPriceSortKey(b));
+      currentSort = "priceAsc";
+    } else if (type === "priceDesc") {
+      sorted = [...originalCardOrder].sort((a, b) => getPriceSortKey(b) - getPriceSortKey(a));
+      currentSort = "priceDesc";
     } else {
       // reset — use original order, then clear snapshot so next sort re-snapshots fresh
       sorted = [...originalCardOrder];
