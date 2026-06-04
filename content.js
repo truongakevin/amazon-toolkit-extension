@@ -813,6 +813,28 @@
       return s;
     };
 
+    const downloadCurrentPageHtml = () => {
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      const htmlBlob = new Blob(
+        ["<!DOCTYPE html>\n", document.documentElement.outerHTML],
+        { type: "text/html" }
+      );
+
+      const htmlUrl = URL.createObjectURL(htmlBlob);
+      const dl = Object.assign(document.createElement("a"), {
+        href: htmlUrl,
+        download: `amazon-search-page-${ts}.html`
+      });
+
+      document.body.appendChild(dl);
+      dl.click();
+      dl.remove();
+
+      setTimeout(() => {
+        URL.revokeObjectURL(htmlUrl);
+      }, 300);
+    };
+
     const supportBtn = makeBtn("☕ Support", () => {
       window.open(SUPPORT_URL, "_blank", "noopener,noreferrer");
     });
@@ -910,28 +932,6 @@
     includeUnknownLabel.appendChild(document.createTextNode("Include unknown"));
     row1.appendChild(includeUnknownLabel);
 
-    row1.appendChild(makeBtn("Apply", async () => {
-      const date = maxDateEl.value;
-      const minPrice = minPriceEl.value.trim();
-      const maxPrice = maxPriceEl.value.trim();
-      const next = {
-        ...settings,
-        mode: date ? "byDate" : "off",
-        maxDate: date,
-        includeUnknown: includeUnknownEl.checked,
-        minPrice,
-        maxPrice
-      };
-
-      const min = Number.parseFloat(minPrice);
-      const max = Number.parseFloat(maxPrice);
-      if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
-        const corrected = String(min);
-        maxPriceEl.value = corrected;
-        next.maxPrice = corrected;
-      }
-
-      settings = next;
     const includeSponsoredEl = document.createElement("input");
     includeSponsoredEl.id = "amz-toolkit-inline-include-sponsored";
     includeSponsoredEl.type = "checkbox";
@@ -945,6 +945,29 @@
     includeSponsoredLabel.appendChild(document.createTextNode("Include sponsored"));
     row1.appendChild(includeSponsoredLabel);
 
+    row1.appendChild(makeBtn("Apply", async () => {
+      const date = maxDateEl.value;
+      const minPrice = minPriceEl.value.trim();
+      const maxPrice = maxPriceEl.value.trim();
+      const next = {
+        ...settings,
+        mode: date ? "byDate" : "off",
+        maxDate: date,
+        includeUnknown: includeUnknownEl.checked,
+        includeSponsored: includeSponsoredEl.checked,
+        minPrice,
+        maxPrice
+      };
+
+      const min = Number.parseFloat(minPrice);
+      const max = Number.parseFloat(maxPrice);
+      if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
+        const corrected = String(min);
+        maxPriceEl.value = corrected;
+        next.maxPrice = corrected;
+      }
+
+      settings = next;
       ensureReapplyGuard();
       applyFilters();
       await chrome.storage.sync.set({ [STORAGE_KEY]: next });
@@ -953,14 +976,15 @@
     row1.appendChild(makeBtn("Reset", async () => {
       maxDateEl.value = "";
       includeUnknownEl.checked = true;
+      includeSponsoredEl.checked = true;
       minPriceEl.value = "";
-        includeSponsored: includeSponsoredEl.checked,
       maxPriceEl.value = "";
       const next = {
         ...settings,
         mode: "off",
         maxDate: "",
         includeUnknown: true,
+        includeSponsored: true,
         minPrice: "",
         maxPrice: ""
       };
@@ -973,10 +997,13 @@
     const badge = getOrCreateDebugBadge();
     row1.appendChild(badge);
 
+    const downloadHtmlBtn = makeBtn("Download HTML", downloadCurrentPageHtml);
+    downloadHtmlBtn.style.marginRight = "auto";
+    row2.appendChild(downloadHtmlBtn);
+
     row2.appendChild(makeLabel("Sort:"));
     row2.appendChild(makeBtn("Delivery Date", () => doSort("deliveryDate")));
     row2.appendChild(makeBtn("Price ↑", () => doSort("priceAsc")));
-      includeSponsoredEl.checked = true;
     row2.appendChild(makeBtn("Price ↓", () => doSort("priceDesc")));
     row2.appendChild(makeBtn("Review Count", () => doSort("reviewCount")));
     row2.appendChild(makeBtn("Reset", () => doSort("reset")));
@@ -984,7 +1011,6 @@
     const GRID_STYLE_ID = "amz-toolkit-grid-style";
     let gridActive = false;
     // Store original inline styles so we can restore on toggle-off
-        includeSponsored: true,
     const gridOriginalStyles = new WeakMap();
 
     row2.appendChild(makeBtn("⊞ Grid View", () => {
