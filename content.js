@@ -56,6 +56,8 @@
   let debounceTimer;
   let guardIntervalId;
   let pageLoadInFlight = false;
+  let hasHandledInvalidContext = false;
+  let storageChangeListener = null;
 
   // ============================================
   // CONSOLE LOG BUFFER (for export debug)
@@ -82,6 +84,68 @@
   let nextPageUrl = "";
   const loadedAsins = new Set();
   const REAPPLY_GUARD_MS = 800;
+
+  function isExtensionContextValid() {
+    return Boolean(chrome?.runtime?.id);
+  }
+
+  function isContextInvalidationError(error) {
+    const message = String(error?.message || error || "");
+    return /extension context invalidated/i.test(message);
+  }
+
+  function cleanupForInvalidContext() {
+    if (observer) {
+      observer.disconnect();
+      observer = undefined;
+    }
+
+    if (debounceTimer) {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = undefined;
+    }
+
+    stopReapplyGuard();
+
+    if (storageChangeListener && chrome?.storage?.onChanged?.removeListener) {
+      try {
+        chrome.storage.onChanged.removeListener(storageChangeListener);
+      } catch (_) {
+        // no-op
+      }
+    }
+  }
+
+  function handleContextInvalidation(error) {
+    if (!isContextInvalidationError(error)) return false;
+    if (!hasHandledInvalidContext) {
+      hasHandledInvalidContext = true;
+      console.warn("[Amazon Search Toolkit] Extension context invalidated; stopping content-script activity.");
+      cleanupForInvalidContext();
+    }
+    return true;
+  }
+
+  async function safeStorageGet(keys) {
+    if (!isExtensionContextValid()) return {};
+    try {
+      return await chrome.storage.sync.get(keys);
+    } catch (error) {
+      if (handleContextInvalidation(error)) return {};
+      throw error;
+    }
+  }
+
+  async function safeStorageSet(values) {
+    if (!isExtensionContextValid()) return false;
+    try {
+      await chrome.storage.sync.set(values);
+      return true;
+    } catch (error) {
+      if (handleContextInvalidation(error)) return false;
+      throw error;
+    }
+  }
 
   function getOrCreateDebugBadge() {
     let badge = document.getElementById(DEBUG_BADGE_ID);
@@ -718,7 +782,7 @@
   }
 
   async function loadSettings() {
-    const result = await chrome.storage.sync.get([STORAGE_KEY, LEGACY_STORAGE_KEY]);
+    const result = await safeStorageGet([STORAGE_KEY, LEGACY_STORAGE_KEY]);
     const current = result[STORAGE_KEY];
     const legacy = result[LEGACY_STORAGE_KEY];
     const mergedSettings = current || legacy || {};
@@ -729,7 +793,7 @@
     };
 
     if (!current && legacy) {
-      await chrome.storage.sync.set({ [STORAGE_KEY]: mergedSettings });
+      await safeStorageSet({ [STORAGE_KEY]: mergedSettings });
     }
   }
 
@@ -758,14 +822,18 @@
   }
 
   function setupStorageListener() {
-    chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (!isExtensionContextValid()) return;
+
+    storageChangeListener = (changes, areaName) => {
       if (areaName !== "sync") return;
       const incoming = changes[STORAGE_KEY]?.newValue || changes[LEGACY_STORAGE_KEY]?.newValue;
       if (!incoming) return;
       settings = { ...settings, ...incoming };
       ensureReapplyGuard();
       debounceApplyFilters();
-    });
+    };
+
+    chrome.storage.onChanged.addListener(storageChangeListener);
   }
 
   const INLINE_FILTER_UI_ID = "amz-search-toolkit-inline-ui";
@@ -867,7 +935,7 @@
       const targetPages = Math.max(1, Math.min(50, Number(pagesInput.value) || 1));
       pagesInput.value = String(targetPages);
       settings = { ...settings, pages: targetPages };
-      await chrome.storage.sync.set({ [STORAGE_KEY]: settings });
+      await safeStorageSet({ [STORAGE_KEY]: settings });
       await loadPagesUpTo(targetPages);
     };
 
@@ -970,7 +1038,7 @@
       settings = next;
       ensureReapplyGuard();
       applyFilters();
-      await chrome.storage.sync.set({ [STORAGE_KEY]: next });
+      await safeStorageSet({ [STORAGE_KEY]: next });
     }));
 
     row1.appendChild(makeBtn("Reset", async () => {
@@ -991,7 +1059,7 @@
       settings = next;
       ensureReapplyGuard();
       applyFilters();
-      await chrome.storage.sync.set({ [STORAGE_KEY]: next });
+      await safeStorageSet({ [STORAGE_KEY]: next });
     }));
 
     const badge = getOrCreateDebugBadge();
@@ -1214,6 +1282,8 @@
   // ============================================
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (!isExtensionContextValid()) return false;
+
     if (message.type === "GET_STATE") {
       sendResponse({ currentSort });
       return false;
@@ -1312,6 +1382,8 @@
       sendResponse({ ok: true });
       return false;
     }
+
+    return false;
   });
 
   init().catch((error) => {
