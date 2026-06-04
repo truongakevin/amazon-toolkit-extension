@@ -8,6 +8,7 @@
   const DEBUG_BADGE_ID = "amz-search-toolkit-debug-badge";
   const MORE_RESULTS_HIDDEN_ATTR = "data-amz-more-results-hidden";
   const SPONSORED_HIDDEN_ATTR = "data-amz-sponsored-hidden";
+  const SPONSORED_WIDGET_HIDDEN_ATTR = "data-amz-sponsored-widget-hidden";
   const SEARCH_RESULT_SELECTOR = 'div[data-component-type="s-search-result"]';
   const SEARCH_RESULT_FALLBACK_SELECTOR = '#search div.s-result-item[data-asin]:not([data-asin=""])';
   const RESULTS_CONTAINER_SELECTOR = ".s-main-slot.s-result-list.s-search-results";
@@ -46,6 +47,7 @@
     mode: "off",
     maxDate: "",
     includeUnknown: true,
+    includeSponsored: false,
     minPrice: "",
     maxPrice: ""
   };
@@ -205,7 +207,7 @@
         url = nextPageUrl;
       }
 
-      applyFilters("multipage-load");
+      applyFilters();
     } catch (error) {
       console.error("[Amazon Search Toolkit] Failed to load additional pages:", error);
     } finally {
@@ -426,39 +428,35 @@
   }
 
   function isSponsoredCard(card) {
-    // Common Amazon sponsored markers inside result cards
-    if (card.querySelector("a.s-widget-sponsored-label-text")) return true;
+    // Prefer explicit, visible sponsored markers only.
+    const explicitMarkers = card.querySelectorAll(
+      'a.s-widget-sponsored-label-text, [data-action="multi-ad-feedback-form-trigger"], .puis-sponsored-label-text, span.a-color-secondary[aria-label*="Sponsored information"]'
+    );
 
-    // Some sponsored cards live inside a sponsored carousel/widget where
-    // the Sponsored label is rendered at widget level, not card level.
+    for (const marker of explicitMarkers) {
+      const style = window.getComputedStyle(marker);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      const rect = marker.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      return true;
+    }
+
+    // Some sponsored cards live inside dedicated sponsored widgets where the
+    // label is rendered at widget level (not directly in each card).
     const sponsoredWidgetRoot =
       card.closest('[cel_widget_id*="FEATURED_ASINS_LIST"]') ||
-      card.closest('[data-cel-widget*="FEATURED_ASINS_LIST"]') ||
-      card.closest(".s-widget-container") ||
-      card.closest(".s-result-item");
+      card.closest('[data-cel-widget*="FEATURED_ASINS_LIST"]');
 
     if (
       sponsoredWidgetRoot &&
       sponsoredWidgetRoot.querySelector(
-        'a.s-widget-sponsored-label-text, [aria-label*="Sponsored information"], [data-action="multi-ad-feedback-form-trigger"]'
+        'a.s-widget-sponsored-label-text, [data-action="multi-ad-feedback-form-trigger"]'
       )
     ) {
       return true;
     }
 
-    const sponsoredTextNodes = card.querySelectorAll(
-      '[aria-label*="Sponsored"], [class*="s-sponsored"], [class*="sponsor"], [data-component-type*="s-sponsored"]'
-    );
-
-    for (const node of sponsoredTextNodes) {
-      const text = (node.textContent || "").trim().toLowerCase();
-      const aria = (node.getAttribute("aria-label") || "").trim().toLowerCase();
-      if (text === "sponsored" || aria.includes("sponsored")) return true;
-    }
-
-    // Fallback text check for edge templates
-    const cardText = (card.textContent || "").toLowerCase();
-    return /\bsponsored\b/.test(cardText);
+    return false;
   }
 
   function setSponsoredHiddenState(card, shouldHide) {
@@ -472,15 +470,32 @@
   }
 
   function getSearchResultCards() {
-    const primaryCards = Array.from(document.querySelectorAll(SEARCH_RESULT_SELECTOR));
-    const fallbackCards = Array.from(document.querySelectorAll(SEARCH_RESULT_FALLBACK_SELECTOR));
+    const container = getResultsContainer();
 
-    const seen = new Set();
+    let scopedCards = [];
+    if (container) {
+      scopedCards = Array.from(
+        container.querySelectorAll(
+          ':scope > div[data-component-type="s-search-result"], :scope > div.s-result-item[data-asin]:not([data-asin=""])'
+        )
+      );
+    }
+
+    const primaryCards = scopedCards.length > 0
+      ? scopedCards
+      : Array.from(document.querySelectorAll(SEARCH_RESULT_SELECTOR));
+    const fallbackCards = scopedCards.length > 0
+      ? []
+      : Array.from(document.querySelectorAll(SEARCH_RESULT_FALLBACK_SELECTOR));
+
+    const seenAsins = new Set();
     const merged = [];
 
     for (const card of [...primaryCards, ...fallbackCards]) {
-      if (seen.has(card)) continue;
-      seen.add(card);
+      const asin = card.getAttribute("data-asin");
+      if (!asin) continue;
+      if (seenAsins.has(asin)) continue;
+      seenAsins.add(asin);
       merged.push(card);
     }
 
@@ -572,38 +587,71 @@
       document.querySelectorAll(sel).forEach((el) => hideRow(el));
     });
 
-    // Hide any sponsored widgets/rows (including inline sponsored carousels)
-    // that break grid/list flow and should not appear in results.
-    const sponsoredSelectors = [
-      "a.s-widget-sponsored-label-text",
-      '[aria-label*="Sponsored information"]',
-      '[data-action="multi-ad-feedback-form-trigger"]'
-    ];
+    // Hide sponsored widgets/rows (including inline sponsored carousels)
+    // unless user explicitly enables "Include sponsored".
+    if (!settings.includeSponsored) {
+      const sponsoredSelectors = [
+        "a.s-widget-sponsored-label-text",
+        '[aria-label*="Sponsored information"]',
+        '[data-action="multi-ad-feedback-form-trigger"]'
+      ];
 
-    sponsoredSelectors.forEach((sel) => {
-      document.querySelectorAll(sel).forEach((el) => {
-        const root =
-          el.closest('[cel_widget_id*="FEATURED_ASINS_LIST"]') ||
-          el.closest('[data-cel-widget*="FEATURED_ASINS_LIST"]') ||
-          el.closest(".s-widget-container") ||
-          el.closest(".s-result-item");
-        hideRow(root || el);
+      sponsoredSelectors.forEach((sel) => {
+        document.querySelectorAll(sel).forEach((el) => {
+          const root =
+            el.closest('[cel_widget_id*="FEATURED_ASINS_LIST"]') ||
+            el.closest('[data-cel-widget*="FEATURED_ASINS_LIST"]') ||
+            el.closest(".s-widget-container") ||
+            el.closest(".s-result-item");
+
+          const row = root?.closest(".s-result-item") || root || el;
+          if (row instanceof HTMLElement) {
+            row.setAttribute(SPONSORED_WIDGET_HIDDEN_ATTR, "1");
+            row.style.setProperty("display", "none", "important");
+            row.setAttribute("aria-hidden", "true");
+          }
+        });
       });
-    });
+    } else {
+      document
+        .querySelectorAll(`[${SPONSORED_WIDGET_HIDDEN_ATTR}="1"]`)
+        .forEach((row) => {
+          if (!(row instanceof HTMLElement)) return;
+          row.removeAttribute(SPONSORED_WIDGET_HIDDEN_ATTR);
+          row.style.removeProperty("display");
+          row.removeAttribute("aria-hidden");
+        });
+    }
   }
 
-  function applyFilters(reason = "normal") {
+  function applyFilters() {
     if (!isAmazonSearchPage()) {
       hideDebugBadge();
       return;
     }
 
+    // Apply section/widget visibility adjustments first so card counting can
+    // account for rows hidden at widget level (e.g. sponsored carousels).
+    removeMoreResultsHeading();
+
     const cards = getSearchResultCards();
+    let totalCount = 0;
     let hiddenCount = 0;
 
     cards.forEach((card) => {
+      totalCount += 1;
+
+      const hiddenBySponsoredWidget =
+        card.hasAttribute(SPONSORED_WIDGET_HIDDEN_ATTR) ||
+        Boolean(card.closest(`[${SPONSORED_WIDGET_HIDDEN_ATTR}="1"]`));
+
+      if (hiddenBySponsoredWidget) {
+        hiddenCount += 1;
+        return;
+      }
+
       const sponsored = isSponsoredCard(card);
-      if (sponsored) {
+      if (sponsored && !settings.includeSponsored) {
         setSponsoredHiddenState(card, true);
         hiddenCount += 1;
         return;
@@ -616,15 +664,13 @@
       if (!keep) hiddenCount += 1;
     });
 
-    removeMoreResultsHeading();
-
-    updateDebugBadge(cards.length, hiddenCount);
+    updateDebugBadge(totalCount, hiddenCount);
   }
 
   function debounceApplyFilters() {
     clearTimeout(debounceTimer);
     debounceTimer = window.setTimeout(() => {
-      applyFilters("mutation");
+      applyFilters();
       injectToolbar();
     }, 120);
   }
@@ -641,7 +687,7 @@
     if (!isAmazonSearchPage() || !hasActiveFilter()) return;
 
     guardIntervalId = window.setInterval(() => {
-      applyFilters("guard");
+      applyFilters();
     }, REAPPLY_GUARD_MS);
   }
 
@@ -886,8 +932,21 @@
       }
 
       settings = next;
+    const includeSponsoredEl = document.createElement("input");
+    includeSponsoredEl.id = "amz-toolkit-inline-include-sponsored";
+    includeSponsoredEl.type = "checkbox";
+    includeSponsoredEl.checked = settings.includeSponsored === true;
+    includeSponsoredEl.style.cssText = "cursor:pointer; margin:0;";
+
+    const includeSponsoredLabel = document.createElement("label");
+    includeSponsoredLabel.htmlFor = "amz-toolkit-inline-include-sponsored";
+    includeSponsoredLabel.style.cssText = "font-size:13px; color:#0F1111; white-space:nowrap; cursor:pointer; display:flex; align-items:center; gap:5px;";
+    includeSponsoredLabel.appendChild(includeSponsoredEl);
+    includeSponsoredLabel.appendChild(document.createTextNode("Include sponsored"));
+    row1.appendChild(includeSponsoredLabel);
+
       ensureReapplyGuard();
-      applyFilters("inline-ui-apply");
+      applyFilters();
       await chrome.storage.sync.set({ [STORAGE_KEY]: next });
     }));
 
@@ -895,6 +954,7 @@
       maxDateEl.value = "";
       includeUnknownEl.checked = true;
       minPriceEl.value = "";
+        includeSponsored: includeSponsoredEl.checked,
       maxPriceEl.value = "";
       const next = {
         ...settings,
@@ -906,7 +966,7 @@
       };
       settings = next;
       ensureReapplyGuard();
-      applyFilters("inline-ui-reset");
+      applyFilters();
       await chrome.storage.sync.set({ [STORAGE_KEY]: next });
     }));
 
@@ -916,6 +976,7 @@
     row2.appendChild(makeLabel("Sort:"));
     row2.appendChild(makeBtn("Delivery Date", () => doSort("deliveryDate")));
     row2.appendChild(makeBtn("Price ↑", () => doSort("priceAsc")));
+      includeSponsoredEl.checked = true;
     row2.appendChild(makeBtn("Price ↓", () => doSort("priceDesc")));
     row2.appendChild(makeBtn("Review Count", () => doSort("reviewCount")));
     row2.appendChild(makeBtn("Reset", () => doSort("reset")));
@@ -923,6 +984,7 @@
     const GRID_STYLE_ID = "amz-toolkit-grid-style";
     let gridActive = false;
     // Store original inline styles so we can restore on toggle-off
+        includeSponsored: true,
     const gridOriginalStyles = new WeakMap();
 
     row2.appendChild(makeBtn("⊞ Grid View", () => {
@@ -1063,7 +1125,7 @@
       marker.remove();
     }
 
-    applyFilters("post-sort");
+    applyFilters();
     observeDynamicContent(); // reconnect
   }
 
@@ -1110,7 +1172,7 @@
     setupStorageListener();
     observeDynamicContent();
     ensureReapplyGuard();
-    applyFilters("init");
+    applyFilters();
     setTimeout(injectToolbar, 1500);
 
     const targetPages = Math.max(1, Math.min(50, Number(settings.pages) || 1));
